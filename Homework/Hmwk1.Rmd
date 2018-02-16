@@ -1,0 +1,86 @@
+---
+title: "Homework 1"
+author: "Caroline Ledbetter"
+output:
+  pdf_document:
+    fig_caption: yes
+    fig_height: 5
+    fig_width: 4
+---
+
+```{r setup, include=FALSE}
+load('HW1.RData')
+library(rms)
+library(pROC)
+```
+git repository: https://github.com/ledbettc/BIOS6645
+
+1.  
+    a. Calibration - good calibration means good agreement between observed and predicted risk which is what we are looking to maximize in this case.  
+    b. Discrimination - good discrimination means that we can set a threshold that gives us a good ability to "discriminate" those at high vs low risk. If they are all bunched together that is less helpful.  
+    c. A nested case control study does not give good calibration which is a disadvantage for predicitve accuracy but it is faster and less expensive than a full cohort study. 
+    d. The nested case-control study allows you to more easily capture cases especially when they are rare which can allow you to evaluate the calibration in an independent study. In a full cohort study you may spend a lot of money and capture few cases with which to evaluate. 
+  
+2.  
+    d. The scatterplot shows an intercept of approximately negative one with a slope of about 0.5 and some variance as would be expected (the expected variance shoud be distirubted ~ N(0, 0.25), but that is not as easily approximate as the slope and intercept)   
+    
+
+```{r question 2, echo=F, fig.cap= 'Scatterplot of x vs y from 2d.'}
+#question 2 
+plot(y, x)
+```
+
+e. The $\widehat{\beta_{0}}$ = `r ols$coefficients[1]` and $\widehat{\beta_{1}}$ = `r ols$coefficients[2]` which are approximately equal to $\beta_{0}$ = -1 and $\beta_{1}$ = 0.5.  
+
+f. There is not evidence that the model with the squared term is a better fit. The adjusted $R^2$ is worse(smaller) and the F statistic from a partial F test indicates the $X^2$ term is not significantly associated with y (p ~ 0.5).  
+
+ 
+g. The scatterplot shows the same slope and intercept but with less variance as expected. The standard errors in the model are smaller (`r paste(round(summary(ols)$coefficients[, 2], 3), collapse = ', ')` vs. `r paste(round(summary(two_g)$coefficients[, 2], 3), collapse = ', ')` and the $\widehat{\beta_{0}}$ = `r two_g$coefficients[1]` and $\widehat{\beta_{1}}$ = `r two_g$coefficients[2]` are closer to $\beta_{0}$ and $\beta_{1}$. This is as would be expected. Adding an $X^2$ term still does nothing to improve model fit.  
+
+
+
+```{r question 2g, echo=F, fig.cap= 'Scatterplot of x vs y from 2g.'}
+plot(y_2, x)
+```
+
+
+
+```{r q2h, echo=F, fig.cap = 'Predicition Bands for both models', fig.width=6}
+par(mfrow = c(1, 2))
+library(visreg)
+visreg(ols)
+visreg(two_g)
+```
+
+3.  
+b. 
+
+```{r question 3b, echo=F}
+#question 3
+val3b <- val.prob(predict3b, US_TBI$d.unfav) 
+```
+
+```{r question 3, echo=F}
+plot.roc(roc3b, print.auc=TRUE)
+```
+
+c. The estimated fraction should be 38%. 
+d. 
+  
+```{r question 3d, echo=F, fig.width=6}
+plot(cal3d)
+```
+
+e. 
+ 
+f. Applying the model to data from an international trial and evaluating the accuracy. 
+
+g. When applied to the international trial the model has an AUC = 0.747. This model still performs well on the international trial data. 
+
+
+\newpage
+
+```{r source, echo=FALSE}
+sourcecode <- paste(readLines("HW1.R"), collapse="\n")
+cat(paste("```r", sourcecode, "```", sep="\n"))
+```
