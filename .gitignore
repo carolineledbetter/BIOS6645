@@ -35,6 +35,8 @@ vignettes/*.pdf
 
 # DATA Files
 DATA/
+Homework/*.pdf
+*.RData
 
 # R Project Files
 *.Rproj
