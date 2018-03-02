@@ -1,0 +1,224 @@
+---
+title: "Homework 2"
+author: "Caroline Ledbetter"
+date: "`r paste(Sys.Date())`"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup}
+library(glmnet)
+library(caret)
+library(pROC)
+library(ElemStatLearn)
+data("SAheart")
+summary(SAheart)
+```
+git repository: https://github.com/ledbettc/BIOS6645
+
+1.  
+
+```{r one_a}
+# 1a 
+library(corrgram)
+corrgram(SAheart, order = TRUE, lower.panel = panel.shade,
+  upper.panel = panel.pie, text.panel = panel.txt,
+  main = "SAheart Data in PC2/PC1 Order")
+
+featurePlot(x = subset(SAheart, select = -chd), y = as.factor(SAheart[, 'chd']), 
+            plot = "pairs", 
+            auto.key = list(columns = 2))
+```
+
+
+      a. Adiposity and Obese seemed to be strongly correlated, age and adiposity less so. Correlations between other covariates are small.   
+      
+
+```{r one_b}
+par(mfrow = c(4,2))
+boxplot(SAheart$chd, SAheart$sbp, main = 'SBP vs CHD')
+boxplot(SAheart$chd, SAheart$tobacco, main = 'Tobacco vs CHD')
+boxplot(SAheart$chd, SAheart$ldl, main = 'LDL vs CHD')
+boxplot(SAheart$chd, SAheart$adiposity, main = 'Adiposity vs CHD')
+boxplot(SAheart$chd, SAheart$typea, main = 'Type A vs CHD')
+boxplot(SAheart$chd, SAheart$obesity, main = 'Obesity vs CHD')
+boxplot(SAheart$chd, SAheart$alcohol, main = 'Alcohol vs CHD')
+boxplot(SAheart$chd, SAheart$age, main = 'Age vs CHD')
+par(mfrow = c(1,1))
+```
+       
+        b. I do not have any concerns about non linearity between the covariates and 
+            the log odds of chd.   
+        c. NA  
+        
+
+```{r one_d}
+# 1d
+
+SAheart$id <- rownames(SAheart)
+set.seed(101)
+testSamp <- SAheart[sample(1:nrow(SAheart), 92, replace=FALSE),]
+testSamp$test <- 1
+testSamp2 <- testSamp[c(11,12)]
+SAheart2 <- merge(SAheart, testSamp2, by="id", all.x=T)
+train <- subset(SAheart2, is.na(test)==T, select = -test)
+test <- subset(SAheart2, test==1, select = -test)
+
+rm(list = ls(pattern = '^testSamp'))
+glm_step <- train(as.factor(chd) ~ ., data = train[-1], 
+                  method = "glmStepAIC", 
+                  family = 'binomial', 
+                  trControl = trainControl(method = "none"))
+summary(glm_step)
+
+pred <- list()
+pred$glm <- predict(glm_step, subset(test, select = -c(id, chd)), 
+                         type = 'prob')$`1`
+
+```
+
+
+
+```{r one_e}
+# 1 e. 
+roc_glm <- roc(test$chd, pred$glm)
+plot(roc_glm, print.thres = 'best', print.thres.best.method = "youden", 
+     print.auc = T, main = 'ROC for GLM')
+youd_glm <- coords(roc_glm, x = "best", best.method = "youden", 
+                   ret = c("threshold", "specificity", "sensitivity"))
+results <- list()
+print(results$glm<- c(youd_glm, AUC = roc_glm$auc))
+
+fitpredt <- function(t) ifelse(pred$glm > t , 1, 0)
+confusionMatrix(fitpredt(0.438), test$chd)
+```
+
+
+```{r two}
+# 2
+# ### I couldn't figure out how to make this work :/
+# lambdaOpt does not equal lambda.min or lamda.1se
+# but maybe they are close enough? 0.039 vs 0.047 vs 0.068?
+# set.seed(102)
+# lasso_cv <- train(factor(chd, labels = c('No', 'Yes')) ~ .,
+#                   data = train[-1],
+#                   method = "glmnet",
+#                   trControl = trainControl(method = "cv", number = 10,
+#                                            returnResamp = "all",
+#                                            classProbs = TRUE,
+#                                            summaryFunction = twoClassSummary),
+#                   metric = 'ROC',
+#                   tuneGrid = expand.grid(.alpha = 1, 
+#                                          .lambda = c(1:100/1000)))
+# plot(lasso_cv)
+# lasso_cv$finalModel$lambdaOpt
+train_x <- as.matrix(subset(train, select = -c(id, chd, famhist)))
+train_x <- cbind(train_x, famhist = as.numeric(train$famhist))
+
+set.seed(102)
+cv_lasso <- cv.glmnet(train_x, factor(train$chd, levels = c(0,1), 
+                                      labels = c('No', 'Yes')),  
+                       family="binomial", type.measure="class")
+min(cv_lasso$cvm)
+plot(cv_lasso)
+cv_lasso$lambda.min
+
+test_x <- as.matrix(subset(test, select = -c(id, chd, famhist)))
+test_x <- cbind(test_x, famhist = as.numeric(test$famhist))
+
+pred$lasso <- as.vector(predict(cv_lasso, test_x, s = 'lambda.min'))
+```
+
+
+```{r two_a}
+# 2a
+roc_lasso <- roc(test$chd, pred$lasso)
+plot(roc_lasso, print.thres = 'best', print.thres.best.method = "youden", 
+     print.auc = T, main = 'ROC for lasso selected with 10 fold CV')
+youd_lasso <- coords(roc_lasso, x = "best", best.method = "youden", 
+                     ret = c("threshold", "specificity", "sensitivity"))
+print(results$lasso <- c(youd_lasso, AUC = roc_lasso$auc))
+# the threshold is negatice, think i've screwed something up...
+coef(cv_lasso, s = 'lambda.min')
+
+fitpredt <- function(t) ifelse(pred$lasso > t , 1, 0)
+confusionMatrix(fitpredt(-0.439), test$chd)
+```
+
+
+```{r three}
+seeds <- vector(mode = "list", length = nrow(train) + 1)
+seeds <- lapply(seeds, function(x) 1:20)
+
+cctrl1 <- trainControl(method = "cv", number = 10, returnResamp = "all",
+                       classProbs = TRUE, 
+                       summaryFunction = twoClassSummary,
+                       seeds = seeds)
+
+rf <- train(factor(chd, levels = c(0,1), 
+                   labels = c('No', 'Yes')) ~ ., 
+            data = train[-1], 
+            method = "rf", 
+            trControl = cctrl1, 
+            metric = "ROC", 
+            ntree = 20, 
+            importance = TRUE)
+cctrl3 <- trainControl(method = "oob",
+                       seeds = seeds)
+set.seed(111)
+rf2 <- train(factor(chd, levels = c(0,1), 
+                    labels = c('No', 'Yes')) ~ ., 
+             data = train[-1], 
+             method = "rf", 
+             trControl = cctrl3, 
+             ntree = 20)
+summary(rf)
+summary(rf2)
+varImp(rf)
+varImp(rf2)
+pred$rf <- predict(rf, subset(test, select = -c(id, chd)), 
+                         type = 'raw')
+pred$rf2 <- predict(rf2, subset(test, select = -c(id, chd)))
+confusionMatrix(pred$rf, factor(test$chd, 
+                                levels = c(0,1), 
+                                labels = c('No', 'Yes')))
+confusionMatrix(pred$rf2, factor(test$chd, 
+                                levels = c(0,1), 
+                                labels = c('No', 'Yes')))
+
+# 3a OOB error = 0.2174
+
+# 3 b 
+
+pred$rf2_p <- predict(rf2, subset(test, select = -c(id, chd)), 
+                      type = 'prob')$`Yes`
+roc_rf <- roc(test$chd, pred$rf2_p)
+plot(roc_rf, 
+     print.auc = T, main = 'ROC for Random Forrest')
+youd_rf <- coords(roc_rf, x = "best", best.method = "youden", 
+                     ret = c("specificity", "sensitivity"))
+print(results$rf <- c(youd_rf, AUC = roc_lasso$auc))
+
+```
+
+
+```{r four}
+print(results)
+summary(glm_step)
+coef(cv_lasso, s = 'lambda.min')
+varImp(rf2)
+fitpredt <- function(t) ifelse(pred$glm > t , 1, 0)
+confusionMatrix(fitpredt(0.438), test$chd)
+fitpredt <- function(t) ifelse(pred$lasso > t , 1, 0)
+confusionMatrix(fitpredt(-0.439), test$chd)
+confusionMatrix(pred$rf2, factor(test$chd, 
+                                levels = c(0,1), 
+                                labels = c('No', 'Yes')))
+```
+
+
+4. The three models all perform okay, but the glm had the best AUC. The accuracy is the same 
+for GLM and Random Forest which is better than Lasso. Tobacco, age,
+and ldl seem to be most important. Family history also seems to matter although for 
+some reason it's last in the Random Forrest. The threshold is nearly identical in Lasso and GLM, except they're oppositely signed(?). I think this has to with the way I did the factoring of the outcome. 
