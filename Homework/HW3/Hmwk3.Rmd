@@ -1,0 +1,101 @@
+---
+title: "Homework 3"
+author: "Caroline Ledbetter"
+output:
+  pdf_document:
+    fig_caption: yes
+    fig_height: 5
+    fig_width: 4
+---
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+knitr::opts_knit$set(root.dir = '../')
+```
+
+
+```{r setup, include=FALSE}
+library(foreign)
+library(gbm)
+library(reshape2)
+library(pROC)
+TBI <- read.spss('../DATA/TBI.sav')
+TBI <- as.data.frame(TBI)
+```
+git repository: https://github.com/ledbettc/BIOS6645
+
+```{r Q1a, include=F}
+TBI$d.unfav <- as.logical(TBI$d.unfav)
+TBI$d.motor <- factor(TBI$d.motor)
+TBI_train <- subset(TBI, trial == "Tirilazad US", 
+                  select = c(d.unfav, d.motor, d.pupil, age))
+TBI_test <- subset(TBI, trial == "Tirilazad International", 
+                  select = c(d.unfav, d.motor, d.pupil, age))
+set.seed(1234) 
+gbm1 <- gbm(d.unfav ~ d.motor + d.pupil + age, data = TBI_train,  
+            distribution = "bernoulli",
+            n.trees = 10000, interaction.depth = 2, cv = 10)
+summary(gbm1)
+print(gbm1)
+best.iter <- gbm.perf(gbm1, method = "cv")
+pred <- list()
+pred$gbmtrain <- predict(gbm1, data = TBI_train, type = 'response')
+
+roc_gbm <- roc(TBI_train$d.unfav, pred$gbmtrain)
+plot(roc_gbm, print.thres = 'best', print.thres.best.method = "youden", 
+     print.auc = T, main = 'ROC for GBM')
+youd_gbm <- coords(roc_gbm, x = "best", best.method = "youden", 
+                   ret = "threshold")
+pred$gbmtrain2 <- ifelse(pred$gbmtrain <= youd_gbm, F, T)
+acc <- list()
+acc$gbmtrain <- sum(pred$gbmtrain2 == TBI_train$d.unfav)/nrow(TBI_train)
+pred$gbmtest <- predict(gbm1, data = TBI_test, type = 'response')
+pred$gbmtest2 <- ifelse(pred$gbmtest <= youd_gbm, F, T)
+acc$gbmtest <- sum(pred$gbmtest2 == TBI_test$d.unfav)/nrow(TBI_test)
+```
+
+1.  
+  a.   
+    ii. N = `r best.iter` trees  
+
+
+```{r plotsq1}
+#Partial dependence plots - assess functional form suggested by results of gbm
+par(mfrow =c(2,2))
+summary.gbm(gbm1, n.trees=best.iter, 
+            method=relative.influence) # variable importance plot
+# visualize what gbm uncovers as functional form
+plot(gbm1, i="d.motor", n.trees=best.iter) 
+plot(gbm1, i="d.pupil", n.trees=best.iter)
+plot(gbm1, i="age", n.trees=best.iter)
+par(mfrow =c(1,1))
+```
+
+1.   
+  a.   
+    iv. I chose a thresholf of `r round(youd_gbm, 2)` based on the RUC curve using youden's     method with `r best.iter` trees.   
+    vi. For the training data set (the US data) the predictive accuracy is 
+        `r round(acc$gbmtrain, 2)`% and for the validation data set 
+        (the international data)
+        it is `r round(acc$gbmtest, 2)`.%   
+      
+```{r 1b, include = F}
+glm1 <- glm(d.unfav ~ d.motor + d.pupil + age, data = TBI_train, 
+            family = 'binomial')
+
+pred$glmtrain <- predict(glm1, data = TBI_train, type = 'response')
+pred$glmtrain2 <- ifelse(pred$glmtrain <= youd_gbm, F, T)
+acc$glmtrain <- sum(pred$glmtrain2 == TBI_train$d.unfav)/nrow(TBI_train)
+
+```
+  
+  b.  
+    i. d.motor>d.pupil>age  
+    ii. For the training data set (the US data) the predictive accuracy is 
+        `r round(acc$glmtrain, 2)`% and for the validation data set 
+        (the international data)
+        it is round(acc$glmtest, 2).%
+    iii. Yes. 
+            
+```{r show-code, ref.label = knitr::all_labels(), echo = TRUE, eval=FALSE}
+
+```
