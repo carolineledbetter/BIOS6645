@@ -34,7 +34,8 @@ vignettes/*.pdf
 .Rproj.user
 
 # DATA Files
-DATA/
+DATA/*.*
+!DATA/.gitkeep
 Homework/*/*.pdf
 Homework/*/*.html
 *.RData
