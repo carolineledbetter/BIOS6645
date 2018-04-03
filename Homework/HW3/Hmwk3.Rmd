@@ -18,6 +18,9 @@ library(foreign)
 library(gbm)
 library(reshape2)
 library(pROC)
+library(car)
+library(mice)
+library(VIM)
 TBI <- read.spss('../DATA/TBI.sav')
 TBI <- as.data.frame(TBI)
 ```
@@ -71,31 +74,49 @@ par(mfrow =c(1,1))
 ```
 
 1.   
-  a.   
-    iv. I chose a thresholf of `r round(youd_gbm, 2)` based on the RUC curve using youden's     method with `r best.iter` trees.   
+  a.
+    iii.Blah blah blah.
+    iv. I chose a thresholf of `r round(youd_gbm, 2)` based on the RUC curve 
+        using youden's method with `r best.iter` trees.   
+    v.  The admission motor score is most important followed by the pupil 
+        reactivity then age. Age is much less important than the other two.
     vi. For the training data set (the US data) the predictive accuracy is 
         `r round(acc$gbmtrain, 2)`% and for the validation data set 
         (the international data)
         it is `r round(acc$gbmtest, 2)`.%   
       
-```{r 1b, include = F}
+```{r 1b}
 glm1 <- glm(d.unfav ~ d.motor + d.pupil + age, data = TBI_train, 
             family = 'binomial')
 
 pred$glmtrain <- predict(glm1, data = TBI_train, type = 'response')
 pred$glmtrain2 <- ifelse(pred$glmtrain <= youd_gbm, F, T)
 acc$glmtrain <- sum(pred$glmtrain2 == TBI_train$d.unfav)/nrow(TBI_train)
+pred$glmtest <- predict(glm1, data = TBI_test, type = 'response')
+pred$glmtest2 <- ifelse(pred$glmtest <= youd_gbm, F, T)
+acc$glmtest <- sum(pred$glmtest2 == TBI_test$d.unfav)/nrow(TBI_test)
 
+Anova(glm1, type="III", test = "LR")
 ```
   
   b.  
-    i. d.motor>d.pupil>age  
+    i.  Using liklihood ratio tests: d.motor>age>d.pupil  
     ii. For the training data set (the US data) the predictive accuracy is 
         `r round(acc$glmtrain, 2)`% and for the validation data set 
         (the international data)
-        it is round(acc$glmtest, 2).%
-    iii. Yes. 
-            
+        it is `r round(acc$glmtest, 2)`.%  
+    iii.No, the predictive accurcy on the test set is similar to the training 
+        set. Both sets are also have predicition accuracies similar to that of 
+        the test set using the gbm model. This indicates that this might be 
+        approximately the best you can do with the information you have.  
+        
+```{r 2a}
+TBI_miss <- read.csv(file = '../DATA/tbi_miss_2.csv')
+
+
+```
+
+
 ```{r show-code, ref.label = knitr::all_labels(), echo = TRUE, eval=FALSE}
 
 ```
