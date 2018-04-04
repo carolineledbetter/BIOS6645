@@ -42,18 +42,15 @@ print(gbm1)
 best.iter <- gbm.perf(gbm1, method = "cv")
 pred <- list()
 pred$gbmtrain <- predict(gbm1, data = TBI_train, type = 'response')
+pred$gbmtest <- predict(gbm1, newdata = TBI_test, type = 'response')
 
 roc_gbm <- roc(TBI_train$d.unfav, pred$gbmtrain)
 plot(roc_gbm, print.thres = 'best', print.thres.best.method = "youden", 
      print.auc = T, main = 'ROC for GBM')
-youd_gbm <- coords(roc_gbm, x = "best", best.method = "youden", 
-                   ret = "threshold")
-pred$gbmtrain2 <- ifelse(pred$gbmtrain <= youd_gbm, F, T)
-acc <- list()
-acc$gbmtrain <- sum(pred$gbmtrain2 == TBI_train$d.unfav)/nrow(TBI_train)
-pred$gbmtest <- predict(gbm1, data = TBI_test, type = 'response')
-pred$gbmtest2 <- ifelse(pred$gbmtest <= youd_gbm, F, T)
-acc$gbmtest <- sum(pred$gbmtest2 == TBI_test$d.unfav)/nrow(TBI_test)
+AUC <- list()
+AUC$gbmtrain <- auc(roc_gbm)
+AUC$gbmtest <- auc(roc(TBI_test$d.unfav, pred$gbmtest))
+
 ```
 
 1.  
@@ -75,26 +72,25 @@ par(mfrow =c(1,1))
 
 1.   
   a.
-    iii.Blah blah blah.
-    iv. I chose a thresholf of `r round(youd_gbm, 2)` based on the RUC curve 
-        using youden's method with `r best.iter` trees.   
+    iii.  Admission motor skill is the most predictive. Reactive pupils and age appear to have a somewhat linear form. Admission motor skills is perhaps non-linear. 
+    iv. I chose a model with all 3 predictors and `r best.iter` trees.   
     v.  The admission motor score is most important followed by the pupil 
-        reactivity then age. Age is much less important than the other two.
-    vi. For the training data set (the US data) the predictive accuracy is 
-        `r round(acc$gbmtrain, 2)`% and for the validation data set 
+        reactivity then age. Age is much less important than the other two.  
+    vi. For the training data set (the US data) the AUC is 
+        `r round(AUC$gbmtrain, 2)`% and for the validation data set 
         (the international data)
-        it is `r round(acc$gbmtest, 2)`.%   
+        it is `r round(AUC$gbmtest, 2)`.%   
       
 ```{r 1b}
 glm1 <- glm(d.unfav ~ d.motor + d.pupil + age, data = TBI_train, 
             family = 'binomial')
 
-pred$glmtrain <- predict(glm1, data = TBI_train, type = 'response')
-pred$glmtrain2 <- ifelse(pred$glmtrain <= youd_gbm, F, T)
-acc$glmtrain <- sum(pred$glmtrain2 == TBI_train$d.unfav)/nrow(TBI_train)
-pred$glmtest <- predict(glm1, data = TBI_test, type = 'response')
-pred$glmtest2 <- ifelse(pred$glmtest <= youd_gbm, F, T)
-acc$glmtest <- sum(pred$glmtest2 == TBI_test$d.unfav)/nrow(TBI_test)
+pred$glmtrain <- predict(glm1, newdata = TBI_train, type = 'response')
+pred$glmtest <- predict(glm1, newdata = TBI_test, type = 'response')
+
+roc_glm <- roc(TBI_train$d.unfav, pred$glmtrain)
+AUC$glmtrain <- auc(roc_glm)
+AUC$glmtest <- auc(roc(TBI_test$d.unfav, pred$glmtest))
 
 Anova(glm1, type="III", test = "LR")
 ```
@@ -102,18 +98,40 @@ Anova(glm1, type="III", test = "LR")
   b.  
     i.  Using liklihood ratio tests: d.motor>age>d.pupil  
     ii. For the training data set (the US data) the predictive accuracy is 
-        `r round(acc$glmtrain, 2)`% and for the validation data set 
+        `r round(AUC$glmtrain, 2)`% and for the validation data set 
         (the international data)
-        it is `r round(acc$glmtest, 2)`.%  
-    iii.No, the predictive accurcy on the test set is similar to the training 
-        set. Both sets are also have predicition accuracies similar to that of 
-        the test set using the gbm model. This indicates that this might be 
-        approximately the best you can do with the information you have.  
+        it is `r round(AUC$glmtest, 2)`.%   
+    iii.Yes, the accuracy is better on the training data set than the test set 
+        indicating some overfitting.  
         
 ```{r 2a}
 TBI_miss <- read.csv(file = '../DATA/tbi_miss_2.csv')
+TBI_miss_train <- subset(TBI_miss, trial == "Tirilazad US", 
+                         select = c(d_unfav, d_pupil, d_motor, age))
+md.pattern(TBI_miss_train)
+aggr(TBI_miss_train, numbers=TRUE, sortVars=TRUE)
+```
 
+```{r 2acont, include = F}
+TBI_mI <- mice(TBI_miss_train, m=5, maxit=50, meth='rf', 
+               seed=444)
+```
 
+2. a. There are 27 individuals missing age, because only age is missing there are MAR missing on x(age). I don't have reason to suspect they are MNAR but can't be sure. 
+
+```{r 2b}
+glm_mI <- lapply(1:5, function(x){
+  df <- TBI_miss_train
+  df$age[row.names(df) %in% 
+           row.names(TBI_mI$imp$age)] <- TBI_mI$imp$age[, x]
+  glm <- glm(d_unfav ~ d_motor + d_pupil + age, data = df, 
+            family = 'binomial')})
+lapply(glm_mI, summary)
+preds <- lapply(glm_mI, predict, data = TBI_miss_train, 
+                type = 'response')
+AUCs <- lapply(preds, function(x){
+  auc(roc(TBI_miss_train$d_unfav, x))})
+AUCs
 ```
 
 
